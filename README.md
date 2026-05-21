@@ -2,7 +2,7 @@
 
 A Vim plugin for Oracle PL/SQL developers — execute SQL\*Plus sessions, compile PL/SQL objects, and run SQL statements directly from within Vim.
 
-> **Origin:** This plugin is derived from [oracle.vim](https://www.vim.org/scripts/script.php?script_id=141) by Jamis Buck. It has been significantly extended over time to support external connection list files, multiple execution modes (including an embedded terminal and a Python-based background server), and interactive SQL result viewing.
+> **Origin:** This plugin is derived from [oracle.vim](https://www.vim.org/scripts/script.php?script_id=141) by Rajesh Kallingal. It has been significantly extended over time to support external connection list files, multiple execution modes (including an embedded terminal and a Python-based background server), and interactive SQL result viewing.
 
 > **Platform note:** The plugin uses Windows-specific commands and is designed to run on **Windows OS** only.
 
