@@ -263,5 +263,5 @@ Place it in the same directory as `oracleExec.vim`. It manages a persistent SQL\
 
 ## Acknowledgements
 
-This plugin originated from **oracle.vim** by Jamis Buck, available at:
+This plugin originated from **oracle.vim** by Rajesh Kallingal, available at:
 https://www.vim.org/scripts/script.php?script_id=141
