@@ -633,7 +633,7 @@ function ExecuteFile(...)
             let l:sqlcmd = a:1
         endif
 
-        let result = system('py '.s:plugin_dir.'\sqlPlusExec.py -conn '.s:connect_string.' -sqlcmd '.l:sqlcmd)
+        let result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd)
         let result = substitute(result, '\n$', '', '')
 
         let lType = ''
@@ -805,12 +805,15 @@ function! ExecuteSql(aType)
         endif
 
         if len(l:SqlLines) > 0
+            " Remove lines that are commented out -> --
+            let l:SqlLines = filter(copy(l:SqlLines), 'v:val !~ "^\\s*--"')
+
             " If any lines returned, concatenante into a single line
             " for cmd parameter, enclose each line in double quotes
             " and keep an empty space between them.
             let l:sqlcmd = '"'.join(l:SqlLines, '" "').'"'
 
-            let l:result = system('py '.s:plugin_dir.'\sqlPlusExec.py -conn '.s:connect_string.' -sqlcmd '.l:sqlcmd.' -output '.g:PyServerSqlOutput)
+            let l:result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd.' --output '.g:PyServerSqlOutput)
             let l:result = substitute(l:result, '\n$', '', '')
 
             let l:end_time = localtime()
