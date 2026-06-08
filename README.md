@@ -66,7 +66,7 @@ let g:oracleExecVim_devPwd = 'devpassword'
 " Only applies when NOT using pyserver mode (pyserver always runs 'show error').
 let g:postSqlPlusCmd = ['show err', 'prompt', 'accept any char prompt "Press ENTER to exit.."', 'exit']
 
-" Alternative: no post-commands (window closes immediately)
+" Alternative: no post-commands
 " let g:postSqlPlusCmd = []
 
 " Alternative: just show errors
