@@ -927,7 +927,7 @@ function! ExecuteSql(aType)
 
             " If SELECT statement then build result table.
             " Don't output table for errors or 'no rows selected'
-            if (l:SqlLines[0] =~? '^\s*\(select\|with\)\(\W\|$\)') && stridx(l:result, "no rows selected") == -1 && stridx(l:result, "ERROR at line") == -1
+            if (l:SqlLines[0] =~? '^\s*\(select\|with\)\(\W\|$\)') && stridx(l:result, "no rows selected") == -1 && stridx(l:result, "ERROR") == -1
                 let l:lines = CSVToTable(l:lines)
             endif
 
