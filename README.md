@@ -50,9 +50,6 @@ let g:ConnectionFile = 'C:\\path\\to\\vim.conlist.txt'
 " or set to 'terminal' or 'pyserver' (see Execution Modes below).
 let g:oracleExecVim_termstart = 'pyserver'
 
-" Output format for pyserver mode (currently only 'presto' is supported by the plugin)
-let g:PyServerSqlOutput = 'presto'
-
 " Default credentials used as a fallback when no connection has been selected
 let g:oracleExecVim_defaultUserName = 'myuser'
 let g:oracleExecVim_defaultPwd = 'mypassword'
@@ -79,7 +76,6 @@ let g:postSqlPlusCmd = ['show err', 'prompt', 'accept any char prompt "Press ENT
 |---|---|---|
 | `g:ConnectionFile` | `''` | Full path to the connection list file. Must be set before the plugin loads. |
 | `g:oracleExecVim_termstart` | *(unset)* | Execution mode. Unset = external CMD; `'terminal'` = Vim terminal; `'pyserver'` = Python server. |
-| `g:PyServerSqlOutput` | `'csv'` | Output format requested from `sqlPlusExec.py`. The plugin's result viewer currently supports `'presto'` table format. |
 | `g:oracleExecVim_defaultUserName` | `''` | Default Oracle username pre-populated when no connection is active. |
 | `g:oracleExecVim_defaultPwd` | `''` | Default Oracle password. |
 | `g:oracleExecVim_devUserName` | *(inherits default)* | Username used for the automatic Dev connection. |
@@ -110,7 +106,6 @@ SQL\*Plus runs as a persistent background process managed by [sqlPlusExec.py](ht
 
 ```vim
 let g:oracleExecVim_termstart = 'pyserver'
-let g:PyServerSqlOutput = 'presto'
 ```
 
 `sqlPlusExec.py` must be placed in the same directory as `oracleExec.vim`.
@@ -228,7 +223,7 @@ In `pyserver` mode, you can execute ad-hoc SQL without leaving Vim:
 - **Single statement:** Place the cursor anywhere within a SQL statement (delimited by `;` or a line containing only `/`) and press `<F9>`. The plugin highlights the detected statement and sends it to SQL\*Plus.
 - **Visual selection:** Select lines in Visual mode and press `<F9>` or `<F5>` to execute exactly that text.
 
-Results are displayed in a split buffer at the bottom of the screen. SELECT results are returned in the format specified by `g:PyServerSqlOutput` (currently `presto` table format is supported). The active cell is highlighted as you navigate.
+Results are displayed in a split buffer at the bottom of the screen. SELECT results are returned in the csv format. The plugin outputs the data into a text table in a separate buffer. The active cell is highlighted as you navigate.
 
 ---
 

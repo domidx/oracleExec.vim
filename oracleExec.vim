@@ -789,6 +789,109 @@ function! GetSelectedText()
     return l:selectedText
 endfunction
 
+function! ParseCSVLine(line)
+    let fields = []
+    " Pattern invented by JammyDonut, thanks a lot!!!
+    let pat = '\("\(""\|[^"]\)*"\|[^,]*\)[,]\?'
+    let pos = 0
+    while pos <= len(a:line)
+        let [match, start, end] = matchstrpos(a:line, pat, pos)
+        if start == -1 || end == pos
+            break
+        endif
+        " strip surrounding quotes if present
+        let field = match
+        let field = substitute(field, ',$', '', '')   " strip trailing comma
+        if field =~ '^".*"$'
+            let field = field[1:-2]                     " strip outer quotes
+            let field = substitute(field, '""', '"', 'g') " unescape ""
+        endif
+        call add(fields, field)
+        let pos = end
+    endwhile
+    return fields
+endfunction
+
+function! CSVToTable(csv_lines)
+    " Parse CSV into rows
+    let rows = []
+    let rn = 0
+    for line in a:csv_lines
+        let fields = ParseCSVLine(line)
+        " Trim whitespace from each field
+        let fields = map(fields, 'substitute(v:val, "^\\s*\\|\\s*$", "", "g")')
+
+        " Prepend row number (header gets label, data rows get count)
+        if rn == 0
+            let fields = ['rn'] + fields
+        else
+            let fields = [string(rn)] + fields
+        endif
+        let rn += 1
+
+        call add(rows, fields)
+    endfor
+
+    " Determine number of columns (use max across all rows)
+    let ncols = max(map(copy(rows), 'len(v:val)'))
+
+    " Pad rows that have fewer columns than ncols
+    for row in rows
+        while len(row) < ncols
+            call add(row, '')
+        endwhile
+    endfor
+
+    " Compute max width for each column
+    let col_widths = repeat([0], ncols)
+    for row in rows
+        for i in range(ncols)
+            let w = len(row[i])
+            if w > col_widths[i]
+                let col_widths[i] = w
+            endif
+        endfor
+    endfor
+
+    " Build a separator line: -------+-------
+    function! MakeSep(col_widths) closure
+        let parts = []
+        for w in a:col_widths
+            call add(parts, repeat('-', w + 2))
+        endfor
+        "return '+' . join(parts, '+') . '+'
+        return join(parts, '+')
+    endfunction
+
+    " Build a data row:   val   | val   
+    function! MakeRow(row, col_widths) closure
+        let parts = []
+        for i in range(len(a:col_widths))
+            let val = get(a:row, i, '')
+            call add(parts, ' ' . val . repeat(' ', a:col_widths[i] - len(val) + 1))
+        endfor
+        " return '|' . join(parts, '|') . '|'
+        return join(parts, '|')
+    endfunction
+
+    let sep = MakeSep(col_widths)
+    let output = []
+
+    " Presto style: separator, header, double-separator, data rows, separator
+    "  call add(output, sep)
+    call add(output, MakeRow(rows[0], col_widths))   " header row
+    call add(output, substitute(sep, '-', '-', 'g')) " same sep (or use '=' for double)
+
+    let output[-1] = sep
+
+    for row in rows[1:]
+        call add(output, MakeRow(row, col_widths))
+    endfor
+    "  call add(output, sep)
+
+    return output
+endfunction
+
 function! ExecuteSql(aType)
     if s:termstart == 'pyserver'
 
@@ -813,13 +916,21 @@ function! ExecuteSql(aType)
             " and keep an empty space between them.
             let l:sqlcmd = '"'.join(l:SqlLines, '" "').'"'
 
-            let l:result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd.' --output '.g:PyServerSqlOutput)
-            let l:result = substitute(l:result, '\n$', '', '')
+            "let l:result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd.' --output '.g:PyServerSqlOutput)
+            let l:result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd)
+            "let l:result = substitute(l:result, '\n$', '', '')
 
             let l:end_time = localtime()
             echo '============ RESULTS RETURNED ('.s:server.' '.strftime("%d-%m-%Y %H:%M:%S", l:end_time) .' '.(l:end_time - l:start_time).'s) ============'
 
             let l:lines = split(l:result, '\n')
+
+            " If SELECT statement then build result table.
+            " Don't output table for errors or 'no rows selected'
+            if (l:SqlLines[0] =~? '^\s*\(select\|with\)\(\W\|$\)') && stridx(l:result, "no rows selected") == -1 && stridx(l:result, "ERROR at line") == -1
+                let l:lines = CSVToTable(l:lines)
+            endif
+
             call ShowExecOutput(l:lines, 1)
 
         endif
