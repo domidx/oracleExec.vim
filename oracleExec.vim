@@ -57,8 +57,11 @@ if exists('g:oracleExecVim_termstart')
     if g:oracleExecVim_termstart == 'terminal'
         let s:termstart='terminal ++close  %s %s @%s'
     elseif g:oracleExecVim_termstart == 'pyserver'
-        let s:termstart='pyserver'
+        let s:plugin_dir = fnamemodify(expand('<sfile>'), ':h')
+        let s:termstart = 'py '.s:plugin_dir.'\sqlPlusExec.py --conn %s --sqlcmd %s'
     endif
+else
+    let g:oracleExecVim_termstart = 'default'
 endif
 
 if !exists('g:PyServerSqlOutput')
@@ -82,8 +85,6 @@ endif
 if !exists('g:oracleExecVim_devPwd')
     let g:oracleExecVim_devPwd = oracleExecVim_defaultPwd
 endif
-
-let s:plugin_dir = fnamemodify(expand('<sfile>'), ':h')
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Commands
@@ -621,7 +622,7 @@ endfunction;
 function ExecuteFile(...)
     " type(a:1) == 3 -- this is true for list
 
-    if s:termstart == 'pyserver'
+    if g:oracleExecVim_termstart == 'pyserver'
         let l:start_time = localtime()
 
         if type(a:1) == 3 
@@ -633,7 +634,7 @@ function ExecuteFile(...)
             let l:sqlcmd = a:1
         endif
 
-        let result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd)
+        let result = system(printf(s:termstart, s:connect_string, l:sqlcmd))
         let result = substitute(result, '\n$', '', '')
 
         let lType = ''
@@ -893,7 +894,7 @@ function! CSVToTable(csv_lines)
 endfunction
 
 function! ExecuteSql(aType)
-    if s:termstart == 'pyserver'
+    if g:oracleExecVim_termstart == 'pyserver'
 
         if CheckConnection () != 0
             return
@@ -916,8 +917,7 @@ function! ExecuteSql(aType)
             " and keep an empty space between them.
             let l:sqlcmd = '"'.join(l:SqlLines, '" "').'"'
 
-            "let l:result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd.' --output '.g:PyServerSqlOutput)
-            let l:result = system('py '.s:plugin_dir.'\sqlPlusExec.py --conn '.s:connect_string.' --sqlcmd '.l:sqlcmd)
+            let l:result = system(printf(s:termstart, s:connect_string, l:sqlcmd))
             "let l:result = substitute(l:result, '\n$', '', '')
 
             let l:end_time = localtime()
@@ -981,7 +981,7 @@ function! SqlPlus (...) range
             endif
 
             let l:postSqlPlusCmd = []
-            if s:termstart == 'pyserver'
+            if g:oracleExecVim_termstart == 'pyserver'
                 let l:postSqlPlusCmd = ['show error']
             elseif len(g:postSqlPlusCmd) > 0
                 let l:postSqlPlusCmd = g:postSqlPlusCmd
