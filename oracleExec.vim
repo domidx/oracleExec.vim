@@ -619,6 +619,107 @@ function! ProcessExecOutput(aOutput, aType, aStartTime)
     endif
 endfunction;
 
+" ============================================================
+"  Async Job Runner with Spinner Popup
+" ============================================================
+
+let s:spinner_frames = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
+let s:spinner_idx    = 0
+let s:spinner_timer  = -1
+let s:collected_output = []
+
+highlight RunSqlPopupBorder guibg=#5f3a1e guifg=#ffaa00
+highlight RunSqlPopupBody   guibg=#5f3a1e guifg=#ffdd88
+
+" ------------------------------------------------------------
+"  Public entry point — call this to kick things off
+" ------------------------------------------------------------
+function! RunAsyncTask(cmd, callback)
+  let s:collected_output = []
+  let s:spinner_idx      = 0
+
+  let l:popup_id = s:OpenSpinnerPopup()
+
+  call job_start(a:cmd, {
+    \ 'out_cb':  function('s:OnOutput'),
+    \ 'err_cb':  function('s:OnError'),
+    \ 'exit_cb': function('s:OnExit', [l:popup_id, a:callback]),
+    \ 'out_mode': 'nl',
+    \ })
+endfunction
+
+" ------------------------------------------------------------
+"  Popup
+" ------------------------------------------------------------
+function! s:OpenSpinnerPopup()
+  let l:popup_id = popup_create(s:spinner_frames[0] . ' Running...', {
+    \ 'title':           ' Processing ',
+    \ 'border':          [],
+    \ 'borderhighlight': ['RunSqlPopupBorder'],
+    \ 'padding':         [1, 4, 1, 4],
+    \ 'pos':             'center',
+    \ 'zindex':          200,
+    \ 'highlight':       'RunSqlPopupBody',
+    \ 'shadow':          1,
+    \ })
+  redraw
+
+  let s:spinner_timer = timer_start(100,
+    \ function('s:SpinTick', [l:popup_id]),
+    \ {'repeat': -1})
+
+  return l:popup_id
+endfunction
+
+function! s:CloseSpinnerPopup(popup_id)
+  call timer_stop(s:spinner_timer)
+  let s:spinner_timer = -1
+  call popup_close(a:popup_id)
+  redraw
+endfunction
+
+" ------------------------------------------------------------
+"  Spinner tick (called every 100ms by the timer)
+" ------------------------------------------------------------
+function! s:SpinTick(popup_id, timer)
+  let s:spinner_idx = (s:spinner_idx + 1) % len(s:spinner_frames)
+  call popup_settext(a:popup_id, s:spinner_frames[s:spinner_idx] . ' Running...')
+  redraw
+endfunction
+
+" ------------------------------------------------------------
+"  Job callbacks
+" ------------------------------------------------------------
+function! s:OnOutput(channel, line)
+  call add(s:collected_output, a:line)
+endfunction
+
+function! s:OnError(channel, line)
+  call add(s:collected_output, '!ERR: ' . a:line)
+endfunction
+
+function! s:OnExit(popup_id, callback, job, status)
+  call s:CloseSpinnerPopup(a:popup_id)
+
+  if a:status != 0
+    echoerr '❌ Task failed (status ' . a:status . ')'
+    return
+  endif
+
+  call a:callback(s:collected_output)
+endfunction
+
+function RunSqlExec(sqlcmd, callback)
+    call RunAsyncTask(printf(s:termstart, s:connect_string, a:sqlcmd), a:callback)
+endfunction;
+
+function OnExitExecuteFile(type, start_time, lines)
+    let l:result = join(a:lines, "\n")
+    let l:result = substitute(l:result, '\n$', '', '')
+
+    call ProcessExecOutput(l:result, a:type, a:start_time)
+endfunction;
+
 function ExecuteFile(...)
     " type(a:1) == 3 -- this is true for list
 
@@ -634,15 +735,12 @@ function ExecuteFile(...)
             let l:sqlcmd = a:1
         endif
 
-        let result = system(printf(s:termstart, s:connect_string, l:sqlcmd))
-        let result = substitute(result, '\n$', '', '')
-
-        let lType = ''
+        let l:type = ''
         if a:0 > 1
-            let lType = a:2
+            let l:type = a:2
         endif
 
-        call ProcessExecOutput(result, lType, l:start_time)
+        let l:result = RunSqlExec(l:sqlcmd, function('OnExitExecuteFile', [l:type, l:start_time]))
 
     else
         let l:runFile = ""
@@ -893,6 +991,25 @@ function! CSVToTable(csv_lines)
     return output
 endfunction
 
+function OnExitExecuteSql(start_time, isSelect, lines)
+    let l:end_time = localtime()
+    echo '============ RESULTS RETURNED ('.s:server.' '.strftime("%d-%m-%Y %H:%M:%S", l:end_time) .' '.(l:end_time - a:start_time).'s) ============'
+
+    let l:lines = a:lines
+    let l:result = join(a:lines, "\n")
+
+    " If SELECT statement then build result table.
+    " Don't output table for errors or 'no rows selected'
+    if a:isSelect && stridx(l:result, "no rows selected") == -1 && stridx(l:result, "ERROR") == -1
+        let l:lines = CSVToTable(l:lines)
+    endif
+
+    call ShowExecOutput(l:lines, 1)
+
+    call ClearHighlight()
+
+endfunction;
+
 function! ExecuteSql(aType)
     if g:oracleExecVim_termstart == 'pyserver'
 
@@ -911,31 +1028,17 @@ function! ExecuteSql(aType)
         if len(l:SqlLines) > 0
             " Remove lines that are commented out -> --
             let l:SqlLines = filter(copy(l:SqlLines), 'v:val !~ "^\\s*--"')
+            let l:isSelect = l:SqlLines[0] =~? '^\s*\(select\|with\)\(\W\|$\)'
 
             " If any lines returned, concatenante into a single line
             " for cmd parameter, enclose each line in double quotes
             " and keep an empty space between them.
             let l:sqlcmd = '"'.join(l:SqlLines, '" "').'"'
 
-            let l:result = system(printf(s:termstart, s:connect_string, l:sqlcmd))
-            "let l:result = substitute(l:result, '\n$', '', '')
-
-            let l:end_time = localtime()
-            echo '============ RESULTS RETURNED ('.s:server.' '.strftime("%d-%m-%Y %H:%M:%S", l:end_time) .' '.(l:end_time - l:start_time).'s) ============'
-
-            let l:lines = split(l:result, '\n')
-
-            " If SELECT statement then build result table.
-            " Don't output table for errors or 'no rows selected'
-            if (l:SqlLines[0] =~? '^\s*\(select\|with\)\(\W\|$\)') && stridx(l:result, "no rows selected") == -1 && stridx(l:result, "ERROR") == -1
-                let l:lines = CSVToTable(l:lines)
-            endif
-
-            call ShowExecOutput(l:lines, 1)
+            let l:result = RunSqlExec(l:sqlcmd, function('OnExitExecuteSql', [l:start_time, l:isSelect]))
 
         endif
 
-        call ClearHighlight()
     endif
 endfunction
 
