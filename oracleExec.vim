@@ -5,7 +5,6 @@
 "
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-
 " Do not load, if already been loaded
 if exists("loaded_sqlrc")
   finish
@@ -17,25 +16,20 @@ let loaded_sqlrc=1
 let s:cpo_save = &cpo
 set cpo&vim
 
-
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Variables
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " following are the default values for the variables used to connect to an
 " Oracle instance. you can change these variables to connect to a different
 " instance or as a different user. use :CC command to change the connection
-" variables. The value will be remembered for the future sessions based on the
-" value of s:save_settings
+" variables.
 
 let s:sqlcmd='sqlplus '	" executable name of SQL*Plus (non GUI version), if sqlplus is not in the PATH, use the complete path to sqlplus. Make sure you insert a space before the ending quote (')
 let s:user=''	" Default Oracle user name
 let s:password=''	" Default Oracle password
 let s:server=''	" Default Oracle server to use
-let g:dateformat="'YYYYMMDD HH24MI'"	" Default date format to use
 let s:do_highlight_errors=1 " set this variable to 1 to highlight errors after compiling, set to 0 to turn it off
-let s:save_settings=1	"set this variable to 1 if you want the session info saved for next Vim session.
 let s:selected_title=''
-
 
 " Check and load the menu array file.
 if !exists('g:ConnectionFile')
@@ -53,12 +47,12 @@ endif
 " If g:oracleExecVim_termstart is set to 'pyserver', use the sqlPlusExec.py
 " script to run the commands.
 let s:termstart='!start %s %s @%s'
-if exists('g:oracleExecVim_termstart') 
+if exists('g:oracleExecVim_termstart')
     if g:oracleExecVim_termstart == 'terminal'
         let s:termstart='terminal ++close  %s %s @%s'
     elseif g:oracleExecVim_termstart == 'pyserver'
         let s:plugin_dir = fnamemodify(expand('<sfile>'), ':h')
-        let s:termstart = 'py '.s:plugin_dir.'\sqlPlusExec.py --conn %s --sqlcmd %s'
+        let s:termstart = 'py ' . s:plugin_dir . (has('win32') ? '\' : '/') . 'sqlPlusExec.py --conn %s --sqlcmd %s'
     endif
 else
     let g:oracleExecVim_termstart = 'default'
@@ -80,29 +74,30 @@ else
 endif
 
 if !exists('g:oracleExecVim_devUserName')
-    let g:oracleExecVim_devUserName = oracleExecVim_defaultUserName
+    let g:oracleExecVim_devUserName = g:oracleExecVim_defaultUserName
 endif
 if !exists('g:oracleExecVim_devPwd')
-    let g:oracleExecVim_devPwd = oracleExecVim_defaultPwd
+    let g:oracleExecVim_devPwd = g:oracleExecVim_defaultPwd
+endif
+
+if !exists('g:postSqlPlusCmd')
+    let g:postSqlPlusCmd = []
 endif
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Commands
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-command! CC call ChangeConnection ()
-command! -range=% Sql call SqlPlus ()
-
+command! CC call s:ChangeConnection()
+command! -range=% Sql call s:SqlPlus()
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Functions
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-
-
-function! CheckModified ()
+function! s:CheckModified() abort
 	"check the file is modified
 	if &modified
-		let l:choice = confirm ("Do you want to save changes before continuing?", "&Yes\n&No\n&Cancel", 1, "Question")
+		let l:choice = confirm("Do you want to save changes before continuing?", "&Yes\n&No\n&Cancel", 1, "Question")
 		if l:choice == 1
 			write
 		elseif l:choice == 2
@@ -111,20 +106,17 @@ function! CheckModified ()
 			return -1
 		endif
 	endif
+	return 0
 endfunction
 
-
-
-
-
-function! CheckConnection ()
+function! s:CheckConnection() abort
 	" Check to ensure the connection details are defined in the global
 	" variables
-	if exists ("s:user") == 0 || exists ("s:password") == 0 || exists ("s:server") == 0 || s:user == "" || s:password == "" || s:server == ""
-		call SelectDatabase ()
+	if exists("s:user") == 0 || exists("s:password") == 0 || exists("s:server") == 0 || s:user == "" || s:password == "" || s:server == ""
+		call s:SelectDatabase()
 	endif
 	" if the variables are still not set return error
-	if exists ("s:user") == 0 || exists ("s:password") == 0 || exists ("s:server") == 0 || s:user == "" || s:password == "" || s:server == ""
+	if exists("s:user") == 0 || exists("s:password") == 0 || exists("s:server") == 0 || s:user == "" || s:password == "" || s:server == ""
 		echohl ErrorMsg
 		echo "Invalid connection information"
 		echohl None
@@ -134,14 +126,11 @@ function! CheckConnection ()
 	endif
 endfunction
 
-
-
-
-function! ChangeConnection ()
+function! s:ChangeConnection() abort
 	" Prompt user for all the connection information to Oracle
-	exec 'let l:user = input ("Enter userid [' . s:user . ']: ")'
-	exec 'let l:password = inputsecret ("Enter Password [' . substitute (s:password, '.', '*', 'g') . ']: ")'
-	exec 'let l:server = input ("Enter Server [' . s:server . ']: ")'
+	let l:user = input('Enter userid [' . s:user . ']: ')
+	let l:password = inputsecret('Enter Password [****]: ')
+	let l:server = input('Enter Server [' . s:server . ']: ')
 	if l:user != ""
 		let s:user = l:user
 	endif
@@ -156,9 +145,8 @@ function! ChangeConnection ()
     let s:selected_title = ''
 endfunction
 
-
-function! DescribeObject ()
-	if CheckConnection () != 0
+function! s:DescribeObject() abort
+	if s:CheckConnection() != 0
 		return
 	endif
 
@@ -169,9 +157,9 @@ function! DescribeObject ()
 	1,$delete	" empty the buffer
 
 	" create the SQL statements for describe and execute
-	call append (0, "prompt " . l:object)
-	call append (1, "desc " . l:object )
-	1,$call SqlPlus()
+	call append(0, "prompt " . l:object)
+	call append(1, "desc " . l:object)
+	1,$call s:SqlPlus()
 
 	"delete the SQL> prompts
 	normal dW+df 
@@ -179,7 +167,7 @@ function! DescribeObject ()
 
 endfunction
 
-function! SetConnectionString(auser, apwd, aserver)
+function! s:SetConnectionString(auser, apwd, aserver) abort
     let s:user = a:auser
 	let s:password = a:apwd
 	let s:server = a:aserver
@@ -188,24 +176,23 @@ function! SetConnectionString(auser, apwd, aserver)
 	echo s:connect_string
 endfunction
 
-
-function! ConnectToDev ()
+function! s:ConnectToDev() abort
     let l:branchname = ''
-    let l:dirs = split(expand('%:p'), '\')
+    let l:dirs = split(expand('%:p'), '[/\\]')
     let i = 0
     while i < len(l:dirs)
-        if l:dirs[i] == 'branches'
+        if l:dirs[i] == 'branches' && (i + 1) < len(l:dirs)
             let l:branchname = l:dirs[i+1]
         endif
         let i += 1
     endwhile
     let l:version = substitute(l:branchname, '\.', '', 'g')
     if l:version != ''
-        call SetConnectionString(g:oracleExecVim_devUserName, g:oracleExecVim_devPwd, 'dev'.l:version.'.world')
+        call s:SetConnectionString(g:oracleExecVim_devUserName, g:oracleExecVim_devPwd, 'dev'.l:version.'.world')
     endif
 endfunction
 
-function! BuildSelectDbMenu (llist, title)
+function! s:BuildSelectDbMenu(llist, title) abort
 	let retVal = ""
 	let strlist = ""
 
@@ -239,11 +226,11 @@ function! BuildSelectDbMenu (llist, title)
 
 	elseif (a:title == "") && (l:choice == 1)
 		" dev
-		call ConnectToDev ()
+		call s:ConnectToDev()
 
 	elseif (a:title == "") && (l:choice == (len(a:llist)+2))
 		" Other...
-		call ChangeConnection ()
+		call s:ChangeConnection()
 
 	elseif (a:title == "") && (l:choice == (len(a:llist)+3))
 		" Reload
@@ -251,12 +238,12 @@ function! BuildSelectDbMenu (llist, title)
 
 	elseif (l:choice < len(a:llist)+l:menu_shift)
 		if (a:llist[l:choice-l:menu_shift][0] == 'm')
-			let retVal = BuildSelectDbMenu(a:llist[l:choice-l:menu_shift][2], a:title." ".substitute(a:llist[l:choice-l:menu_shift][1], "&", "", "g"))
+			let retVal = s:BuildSelectDbMenu(a:llist[l:choice-l:menu_shift][2], a:title." ".substitute(a:llist[l:choice-l:menu_shift][1], "&", "", "g"))
 
 		else
-            call SetConnectionString(a:llist[l:choice-1][2][0], a:llist[l:choice-1][2][1], a:llist[l:choice-1][2][2])
+            call s:SetConnectionString(a:llist[l:choice-l:menu_shift][2][0], a:llist[l:choice-l:menu_shift][2][1], a:llist[l:choice-l:menu_shift][2][2])
 
-            let s:selected_title = a:title." ".substitute(a:llist[l:choice-1][1], "&", "", "g")
+            let s:selected_title = a:title." ".substitute(a:llist[l:choice-l:menu_shift][1], "&", "", "g")
 		endif
 	endif
 
@@ -269,11 +256,11 @@ function! BuildSelectDbMenu (llist, title)
 	return retVal
 endfunction
 
-function! SelectDatabase()
-	let retVal = BuildSelectDbMenu(g:conlist, "")
+function! s:SelectDatabase() abort
+	let retVal = s:BuildSelectDbMenu(g:conlist, "")
 endfunction
 
-function! CompAll()
+function! s:CompAll() abort
     let lSortExt = ['.pks', '.fnc', '.prc', '.pkb', '.sql']
     let lBufNamesFullPath = map(filter(range(0,bufnr('$')), 'buflisted(v:val)'), 'fnamemodify(bufname(v:val), ":p")')
     let lBufNamesFullPath = filter(copy(lBufNamesFullPath), 'index(lBufNamesFullPath, v:val, v:key+1)==-1')
@@ -302,20 +289,20 @@ function! CompAll()
     endfor
 
     let l:lines = []
-    
+
     for lFileName in lSorted
-        call add(l:lines, 'prompt') 
+        call add(l:lines, 'prompt')
         call add(l:lines, 'prompt Running '.lFileName.'..')
         call add(l:lines, '@'.lFileName)
         call add(l:lines, 'show error')
         call add(l:lines, 'prompt Finished '.lFileName.'..')
     endfor
-    
-    call SqlPlus('compall', l:lines)
+
+    call s:SqlPlus('compall', l:lines)
 
 endfunction
 
-function! DescTable()
+function! s:DescTable() abort
     let l:tableName = expand('<cword>')
 
     if !empty(l:tableName)
@@ -325,13 +312,13 @@ function! DescTable()
             let l:param = '%'
         endif
 
-        call ExecuteFile('"@desc.sql '.l:tableName.' '.l:param.'"')
+        call s:ExecuteFile('"@desc.sql '.l:tableName.' '.l:param.'"')
     else
         echo "No word under cursor!"
     endif
 endfunction
 
-function! JumpCell(aDir)
+function! s:JumpCell(aDir) abort
     let l:curPos = getpos('.')
 
     if a:aDir == 'f'
@@ -344,7 +331,7 @@ function! JumpCell(aDir)
         let l:pipeRow = search('|', 'be', line('.'))
 
         if l:pipeRow == 0
-            " No more pipes, cursor is in the first cell of a row, move oneline up. 
+            " No more pipes, cursor is in the first cell of a row, move one line up.
             " If already at the top, move cursor to the end of last line.
             let l:nextLine = l:curPos[1] - 1
             if l:nextLine <= 0
@@ -396,7 +383,7 @@ endfunction
 
 highlight CurrentTableCell guibg=#FFA500 ctermbg=208
 
-function! HighlightCurrentCell()
+function! s:HighlightCurrentCell() abort
   " Delete previous match
   if exists('w:current_cell_matchid')
     call matchdelete(w:current_cell_matchid)
@@ -450,15 +437,15 @@ function! HighlightCurrentCell()
   let w:current_cell_matchid = matchadd('CurrentTableCell', pattern)
 endfunction
 
-function! SetupHighlightAutocmds()
+function! s:SetupHighlightAutocmds() abort
     augroup TableCellHighlight
         autocmd! * <buffer>
-        autocmd CursorMoved,CursorMovedI <buffer> call HighlightCurrentCell()
+        autocmd CursorMoved,CursorMovedI <buffer> call s:HighlightCurrentCell()
     augroup END
-    call HighlightCurrentCell()
+    call s:HighlightCurrentCell()
 endfunction
 
-function! ShowExecOutput(aLines, aBack)
+function! s:ShowExecOutput(aLines, aBack) abort
     let bufInfo = getbufinfo('PyServerOutputBuff')
 
     if empty(bufInfo)
@@ -489,16 +476,14 @@ function! ShowExecOutput(aLines, aBack)
 
     " Put output in the new buffer
     call setline(1, a:aLines)
-    " Move cursor to top of new buffer
-"    normal! gg
     setlocal nomodifiable
 
     " Map 'q' to close the buffer
     nnoremap <buffer> q :bd!<CR>
-    nnoremap <buffer> <Tab> :call JumpCell('f')<CR>
-    nnoremap <buffer> <S-Tab> :call JumpCell('b')<CR>
-    " Delay the autocommand setup until they enter the buffer,
-    autocmd BufEnter <buffer> call SetupHighlightAutocmds()
+    nnoremap <buffer> <Tab> :call <SID>JumpCell('f')<CR>
+    nnoremap <buffer> <S-Tab> :call <SID>JumpCell('b')<CR>
+    " Delay the autocommand setup until they enter the buffer
+    autocmd BufEnter <buffer> call s:SetupHighlightAutocmds()
 
     if a:aBack == 1
         " Go back to original buffer/window.
@@ -506,7 +491,7 @@ function! ShowExecOutput(aLines, aBack)
     endif
 endfunction
 
-function! ParseAndShowErrors(aQfData) abort
+function! s:ParseAndShowErrors(aQfData) abort
     let qflist = [{'text': '============ Compilation errors ============'}]
 
     for data in a:aQfData
@@ -549,10 +534,10 @@ endfunction
 
 " The procedure loops through the lines.
 " When get to the line starting with 'Running' (see function CompAll)
-" it starts adding lines to errLines until it reaches line starting 
+" it starts adding lines to errLines until it reaches line starting
 " with 'Finished' (again, see function CompAll).
 " Then call function to add to quickfix.
-function! ProcessCompallErrors(aLines)
+function! s:ProcessCompallErrors(aLines) abort
     let filename = ''
     let addErr = 0
     let errLines = []
@@ -560,9 +545,9 @@ function! ProcessCompallErrors(aLines)
 
     for line in a:aLines
         if line =~? 'Running'
-            " Get the file name from 'Running <path>\filename.ext..'.
-            " Split the string by backslash '\'
-            let parts = split(line, '\\')
+            " Get the file name from 'Running <path>/filename.ext..'.
+            " Split the string by path separator (both / and \)
+            let parts = split(line, '[/\\]')
             " Get the last element from the array
             let last_field = parts[-1]
             " Remove the last two characters ('..')
@@ -595,29 +580,29 @@ function! ProcessCompallErrors(aLines)
 
     endfor
 
-    call ParseAndShowErrors(qfData)
+    call s:ParseAndShowErrors(qfData)
 endfunction
 
-function! ProcessExecOutput(aOutput, aType, aStartTime)
+function! s:ProcessExecOutput(aOutput, aType, aStartTime) abort
     let lines = split(a:aOutput, '\n')
 
     if a:aOutput =~? '^.*LINE\/COL\s\+ERROR.*$'
         if a:aType == 'compall'
-            call ProcessCompallErrors(lines)
+            call s:ProcessCompallErrors(lines)
         else
             let qfData = []
             call add(qfData, {'filename': expand("%"), 'errLines': lines})
-            call ParseAndShowErrors(qfData)
+            call s:ParseAndShowErrors(qfData)
         endif
     elseif expand('%:e') == 'sql'
-        call ShowExecOutput(lines, 0)
-    elseif a:aOutput =~? 'created' && a:aType != 'compall' 
+        call s:ShowExecOutput(lines, 0)
+    elseif a:aOutput =~? 'created' && a:aType != 'compall'
         let l:end_time = localtime()
         echo '============ PROCESSING SUCCESSFUL ('.s:server.' '.strftime("%d-%m-%Y %H:%M:%S", l:end_time) .' '.(l:end_time - a:aStartTime).'s): '.filter(copy(lines), 'v:val =~ "created"')[0].' ============'
     else
-        call ShowExecOutput(lines, 0)
+        call s:ShowExecOutput(lines, 0)
     endif
-endfunction;
+endfunction
 
 " ============================================================
 "  Async Job Runner with Spinner Popup
@@ -634,7 +619,7 @@ highlight RunSqlPopupBody   guibg=#5f3a1e guifg=#ffdd88
 " ------------------------------------------------------------
 "  Public entry point — call this to kick things off
 " ------------------------------------------------------------
-function! RunAsyncTask(cmd, callback)
+function! s:RunAsyncTask(cmd, callback) abort
   let s:collected_output = []
   let s:spinner_idx      = 0
 
@@ -651,7 +636,7 @@ endfunction
 " ------------------------------------------------------------
 "  Popup
 " ------------------------------------------------------------
-function! s:OpenSpinnerPopup()
+function! s:OpenSpinnerPopup() abort
   let l:popup_id = popup_create(s:spinner_frames[0] . ' Running...', {
     \ 'title':           ' Processing ',
     \ 'border':          [],
@@ -671,7 +656,7 @@ function! s:OpenSpinnerPopup()
   return l:popup_id
 endfunction
 
-function! s:CloseSpinnerPopup(popup_id)
+function! s:CloseSpinnerPopup(popup_id) abort
   call timer_stop(s:spinner_timer)
   let s:spinner_timer = -1
   call popup_close(a:popup_id)
@@ -681,7 +666,7 @@ endfunction
 " ------------------------------------------------------------
 "  Spinner tick (called every 100ms by the timer)
 " ------------------------------------------------------------
-function! s:SpinTick(popup_id, timer)
+function! s:SpinTick(popup_id, timer) abort
   let s:spinner_idx = (s:spinner_idx + 1) % len(s:spinner_frames)
   call popup_settext(a:popup_id, s:spinner_frames[s:spinner_idx] . ' Running...')
   redraw
@@ -690,15 +675,15 @@ endfunction
 " ------------------------------------------------------------
 "  Job callbacks
 " ------------------------------------------------------------
-function! s:OnOutput(channel, line)
+function! s:OnOutput(channel, line) abort
   call add(s:collected_output, a:line)
 endfunction
 
-function! s:OnError(channel, line)
+function! s:OnError(channel, line) abort
   call add(s:collected_output, '!ERR: ' . a:line)
 endfunction
 
-function! s:OnExit(popup_id, callback, job, status)
+function! s:OnExit(popup_id, callback, job, status) abort
   call s:CloseSpinnerPopup(a:popup_id)
 
   if a:status != 0
@@ -709,25 +694,25 @@ function! s:OnExit(popup_id, callback, job, status)
   call a:callback(s:collected_output)
 endfunction
 
-function RunSqlExec(sqlcmd, callback)
-    call RunAsyncTask(printf(s:termstart, s:connect_string, a:sqlcmd), a:callback)
-endfunction;
+function! s:RunSqlExec(sqlcmd, callback) abort
+    call s:RunAsyncTask(printf(s:termstart, s:connect_string, a:sqlcmd), a:callback)
+endfunction
 
-function OnExitExecuteFile(type, start_time, lines)
+function! s:OnExitExecuteFile(type, start_time, lines) abort
     let l:result = join(a:lines, "\n")
     let l:result = substitute(l:result, '\n$', '', '')
 
-    call ProcessExecOutput(l:result, a:type, a:start_time)
-endfunction;
+    call s:ProcessExecOutput(l:result, a:type, a:start_time)
+endfunction
 
-function ExecuteFile(...)
+function! s:ExecuteFile(...) abort
     " type(a:1) == 3 -- this is true for list
 
     if g:oracleExecVim_termstart == 'pyserver'
         let l:start_time = localtime()
 
-        if type(a:1) == 3 
-            " If any lines returned, concatenante into a single line
+        if type(a:1) == 3
+            " If any lines returned, concatenate into a single line
             " for cmd parameter, enclose each line in double quotes
             " and keep an empty space between them.
             let l:sqlcmd = '"'.join(a:1, '" "').'"'
@@ -740,7 +725,7 @@ function ExecuteFile(...)
             let l:type = a:2
         endif
 
-        let l:result = RunSqlExec(l:sqlcmd, function('OnExitExecuteFile', [l:type, l:start_time]))
+        call s:RunSqlExec(l:sqlcmd, function('s:OnExitExecuteFile', [l:type, l:start_time]))
 
     else
         let l:runFile = ""
@@ -756,14 +741,14 @@ function ExecuteFile(...)
     endif
 endfunction
 
-function! ClearHighlight() abort
+function! s:ClearHighlight() abort
     if exists('w:highlightedCmd')
         call matchdelete(w:highlightedCmd)
         unlet w:highlightedCmd
     endif
 endfunction
 
-function! HighlightRange(startPos, endPos) abort
+function! s:HighlightRange(startPos, endPos) abort
     let startLine = a:startPos[0]
     let startCol  = a:startPos[1]
     let endLine   = a:endPos[0]
@@ -806,20 +791,25 @@ function! HighlightRange(startPos, endPos) abort
     let w:highlightedCmd = matchaddpos('Visual', positions)
 endfunction
 
-function! GetAndHighlightSingleCmd() abort
+function! s:GetAndHighlightSingleCmd() abort
     let l:searchPattern = '\s*;\s*$\|^\s*\/\s*$'
     " Save current cursor position.
     let l:curPos = getpos('.')
-    
+
     " Read character under cursor.
     let l:line = getline(l:curPos[1])
-    let l:curChar = strcharpart(l:line, l:curPos[2] - 1, 1) 
+    let l:curChar = strcharpart(l:line, l:curPos[2] - 1, 1)
 
     " Find end of previous command.
     let l:prevEnd = searchpos(l:searchPattern, 'b', line('w0'))
 
     if l:prevEnd != [0, 0]
         let l:prevEnd = searchpos('\k\+', 'W')
+    endif
+
+    " Handle case where no previous command terminator was found
+    if l:prevEnd == [0, 0]
+        let l:prevEnd = [1, 1]
     endif
 
     " Now find an end of command. If a cursor is on ; or /, use the current
@@ -841,7 +831,7 @@ function! GetAndHighlightSingleCmd() abort
     if l:prevEnd[0] == l:cmdEnd[0]
         " If it's only one line, just take the substring between startCol and endCol.
         " Vim columns are 1-based, string indexing is 0-based
-        let l:lines = [strpart(l:lines[0], l:prevEnd[1] - 1, cmdEnd[1] - l:prevEnd[1]+ 1)]
+        let l:lines = [strpart(l:lines[0], l:prevEnd[1] - 1, l:cmdEnd[1] - l:prevEnd[1] + 1)]
     else
         " Otherwise, handle multiple lines:
         " Trim start line from startCol to end of line
@@ -856,22 +846,22 @@ function! GetAndHighlightSingleCmd() abort
     endif
 
     " Ensure last element is a semicolon line or slash.
-    if !empty(l:lines) &&  l:lines[-1] !~ '[;/]$'
+    if !empty(l:lines) && l:lines[-1] !~ '[;/]$'
         call add(l:lines, ';')
     endif
 
     " Move cursor to the original position.
     call setpos('.', l:curPos)
 
-    call ClearHighlight()
-    call HighlightRange(l:prevEnd, l:cmdEnd)
+    call s:ClearHighlight()
+    call s:HighlightRange(l:prevEnd, l:cmdEnd)
     redraw
 
     return l:lines
 endfunction
 
 " Function to get visually selected text.
-function! GetSelectedText()
+function! s:GetSelectedText() abort
     " Save current register contents to restore later
     let l:saveReg = getreg('"')
     let l:saveRegType = getregtype('"')
@@ -888,7 +878,7 @@ function! GetSelectedText()
     return l:selectedText
 endfunction
 
-function! ParseCSVLine(line)
+function! s:ParseCSVLine(line) abort
     let fields = []
     " Pattern invented by JammyDonut, thanks a lot!!!
     let pat = '\("\(""\|[^"]\)*"\|[^,]*\)[,]\?'
@@ -911,12 +901,29 @@ function! ParseCSVLine(line)
     return fields
 endfunction
 
-function! CSVToTable(csv_lines)
+function! s:MakeSep(col_widths) abort
+    let parts = []
+    for w in a:col_widths
+        call add(parts, repeat('-', w + 2))
+    endfor
+    return join(parts, '+')
+endfunction
+
+function! s:MakeRow(row, col_widths) abort
+    let parts = []
+    for i in range(len(a:col_widths))
+        let val = get(a:row, i, '')
+        call add(parts, ' ' . val . repeat(' ', a:col_widths[i] - len(val) + 1))
+    endfor
+    return join(parts, '|')
+endfunction
+
+function! s:CSVToTable(csv_lines) abort
     " Parse CSV into rows
     let rows = []
     let rn = 0
     for line in a:csv_lines
-        let fields = ParseCSVLine(line)
+        let fields = s:ParseCSVLine(line)
         " Trim whitespace from each field
         let fields = map(fields, 'substitute(v:val, "^\\s*\\|\\s*$", "", "g")')
 
@@ -952,46 +959,20 @@ function! CSVToTable(csv_lines)
         endfor
     endfor
 
-    " Build a separator line: -------+-------
-    function! MakeSep(col_widths) closure
-        let parts = []
-        for w in a:col_widths
-            call add(parts, repeat('-', w + 2))
-        endfor
-        "return '+' . join(parts, '+') . '+'
-        return join(parts, '+')
-    endfunction
-
-    " Build a data row:   val   | val   
-    function! MakeRow(row, col_widths) closure
-        let parts = []
-        for i in range(len(a:col_widths))
-            let val = get(a:row, i, '')
-            call add(parts, ' ' . val . repeat(' ', a:col_widths[i] - len(val) + 1))
-        endfor
-        " return '|' . join(parts, '|') . '|'
-        return join(parts, '|')
-    endfunction
-
-    let sep = MakeSep(col_widths)
+    let sep = s:MakeSep(col_widths)
     let output = []
 
-    " Presto style: separator, header, double-separator, data rows, separator
-    "  call add(output, sep)
-    call add(output, MakeRow(rows[0], col_widths))   " header row
-    call add(output, substitute(sep, '-', '-', 'g')) " same sep (or use '=' for double)
-
-    let output[-1] = sep
+    call add(output, s:MakeRow(rows[0], col_widths))   " header row
+    call add(output, sep)                                " separator
 
     for row in rows[1:]
-        call add(output, MakeRow(row, col_widths))
+        call add(output, s:MakeRow(row, col_widths))
     endfor
-    "  call add(output, sep)
 
     return output
 endfunction
 
-function OnExitExecuteSql(start_time, isSelect, lines)
+function! s:OnExitExecuteSql(start_time, isSelect, lines) abort
     let l:end_time = localtime()
     echo '============ RESULTS RETURNED ('.s:server.' '.strftime("%d-%m-%Y %H:%M:%S", l:end_time) .' '.(l:end_time - a:start_time).'s) ============'
 
@@ -1001,28 +982,28 @@ function OnExitExecuteSql(start_time, isSelect, lines)
     " If SELECT statement then build result table.
     " Don't output table for errors or 'no rows selected'
     if a:isSelect && stridx(l:result, "no rows selected") == -1 && stridx(l:result, "ERROR") == -1
-        let l:lines = CSVToTable(l:lines)
+        let l:lines = s:CSVToTable(l:lines)
     endif
 
-    call ShowExecOutput(l:lines, 1)
+    call s:ShowExecOutput(l:lines, 1)
 
-    call ClearHighlight()
+    call s:ClearHighlight()
 
-endfunction;
+endfunction
 
-function! ExecuteSql(aType)
+function! s:ExecuteSql(aType) abort
     if g:oracleExecVim_termstart == 'pyserver'
 
-        if CheckConnection () != 0
+        if s:CheckConnection() != 0
             return
         endif
 
         let l:start_time = localtime()
 
         if a:aType == 'selected'
-            let l:SqlLines = GetSelectedText()
+            let l:SqlLines = s:GetSelectedText()
         else
-            let l:SqlLines = GetAndHighlightSingleCmd()
+            let l:SqlLines = s:GetAndHighlightSingleCmd()
         endif
 
         if len(l:SqlLines) > 0
@@ -1030,19 +1011,19 @@ function! ExecuteSql(aType)
             let l:SqlLines = filter(copy(l:SqlLines), 'v:val !~ "^\\s*--"')
             let l:isSelect = l:SqlLines[0] =~? '^\s*\(select\|with\)\(\W\|$\)'
 
-            " If any lines returned, concatenante into a single line
+            " If any lines returned, concatenate into a single line
             " for cmd parameter, enclose each line in double quotes
             " and keep an empty space between them.
             let l:sqlcmd = '"'.join(l:SqlLines, '" "').'"'
 
-            let l:result = RunSqlExec(l:sqlcmd, function('OnExitExecuteSql', [l:start_time, l:isSelect]))
+            call s:RunSqlExec(l:sqlcmd, function('s:OnExitExecuteSql', [l:start_time, l:isSelect]))
 
         endif
 
     endif
 endfunction
 
-function! PasteSingleLineFromReg()
+function! s:PasteSingleLineFromReg() abort
     let l:lines = split(getreg('"'), '\n')
     " Remove leading and trailing blank spaces.
     let l:lines = map(l:lines, {_, v -> trim(v)})
@@ -1061,25 +1042,24 @@ function! PasteSingleLineFromReg()
     execute "normal! a".l:oneLine
 endfunction
 
-function! SqlPlus (...) range
-" this function lets you 
+function! s:SqlPlus(...) range abort
+" this function lets you
 "       - start SQL*Plus
 "       - execute the contents of the current buffer and show the results back in
 "       the same buffer
 "       - execute the selected lines from the current buffer and show results in a
 "       new buffer
 
-    if CheckConnection () != 0
+    if s:CheckConnection() != 0
         return
     endif
 
-    "echo a:0
-    if a:0 > 0 
+    if a:0 > 0
         if a:1 == "@"
             " run the 2nd parameter as a file
 
             "check the file is modified
-            if CheckModified () == -1
+            if s:CheckModified() == -1
                 return
             endif
 
@@ -1091,14 +1071,13 @@ function! SqlPlus (...) range
             endif
 
             if len(l:postSqlPlusCmd) > 0 && index(['pks', 'pkb', 'trg', 'fnc', 'prc', 'vw', 'tps', 'tpb'], expand("%:e")) >=0
-                call ExecuteFile(['@'.expand("%:p")]+l:postSqlPlusCmd)
-"                call delete(run_filename)
+                call s:ExecuteFile(['@'.expand("%:p")]+l:postSqlPlusCmd)
             else
-                call ExecuteFile('@'.a:2)
+                call s:ExecuteFile('@'.a:2)
             endif
 
         elseif a:1 == 'compall'
-            call ExecuteFile(a:2, 'compall')
+            call s:ExecuteFile(a:2, 'compall')
 
         else
             " just start SQL*Plus
@@ -1106,7 +1085,6 @@ function! SqlPlus (...) range
         endif
     else
         " Execute the range and display the result in buffer
-        "echo a:firstline "," a:lastline
         silent execute a:firstline ',' a:lastline '!' . s:sqlcmd . ' ' . s:connect_string
 
         let l:old_search = @/
@@ -1116,58 +1094,43 @@ function! SqlPlus (...) range
         "silent execute "/" . s:user . '@' . s:server . ' >'
         " remove the unwanted SQL*Plus details from top & bottom
         silent execute "normal kVggdGNdGgg"
-        "silent execute "g/" . s:user . '@' . s:server . ' >/d'
         let @/ = l:old_search
         setlocal ts=8 nomodified
     endif
 endfunction
 
-function! ORAVimLeavePre()
-	" save the connection information in global variables
-
-	let g:SQLCMD = s:sqlcmd
-	let g:USER = s:user
-	let g:PASSWORD = s:password
-	let g:SERVER = s:server
-"	let g:DATEFORMAT = s:dateformat
-	let g:DO_HIGHLIGHT_ERRORS = s:do_highlight_errors
-	
-endfunction
-
-function! EchoConnectString()
+function! s:EchoConnectString() abort
 	echo s:selected_title.": ".s:connect_string
 endfunction
-
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Mappings
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 " Select Database dialog
-nmap <Leader>c :call SelectDatabase()<CR>
+nnoremap <Leader>c :call <SID>SelectDatabase()<CR>
 
 " Start SQL*Plus window
-nmap <Leader>s :call SqlPlus (1)<CR>
+nnoremap <Leader>s :call <SID>SqlPlus(1)<CR>
 
 " Execute current file in SQL*Plus window
-map <Leader>r :call SqlPlus ('@', expand('%:p'))<CR>
+nnoremap <Leader>r :call <SID>SqlPlus('@', expand('%:p'))<CR>
 
-map <Leader>R :call CompAll()<CR>
+nnoremap <Leader>R :call <SID>CompAll()<CR>
 
-map <Leader>0 :call ExecuteFile('"@dsvn.sql '.fnamemodify(expand('%:t'), ':r').'"')<CR>
-map <Leader>9 :call ExecuteFile('@dver.sql')<CR>
+nnoremap <Leader>0 :call <SID>ExecuteFile('"@dsvn.sql '.fnamemodify(expand('%:t'), ':r').'"')<CR>
+nnoremap <Leader>9 :call <SID>ExecuteFile('@dver.sql')<CR>
 
-map <Leader>m :call EchoConnectString()<CR>
+nnoremap <Leader>m :call <SID>EchoConnectString()<CR>
 
 " domi IDE
-nnoremap <F9> :call ExecuteSql('get')<CR>
-inoremap <F9> <C-o>:call ExecuteSql('get')<CR>
-vnoremap <F9> :<C-U>call ExecuteSql('selected')<CR>
-vnoremap <F5> :<C-U>call ExecuteSql('selected')<CR>
-nnoremap <C-y> :call PasteSingleLineFromReg()<CR>a
-inoremap <C-y> <C-o>:call PasteSingleLineFromReg()<CR><Esc>a
-nnoremap <S-F4> :call DescTable()<CR>
-
+nnoremap <F9> :call <SID>ExecuteSql('get')<CR>
+inoremap <F9> <C-o>:call <SID>ExecuteSql('get')<CR>
+vnoremap <F9> :<C-U>call <SID>ExecuteSql('selected')<CR>
+vnoremap <F5> :<C-U>call <SID>ExecuteSql('selected')<CR>
+nnoremap <C-y> :call <SID>PasteSingleLineFromReg()<CR>a
+inoremap <C-y> <C-o>:call <SID>PasteSingleLineFromReg()<CR><Esc>a
+nnoremap <S-F4> :call <SID>DescTable()<CR>
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Signs
@@ -1180,8 +1143,7 @@ if has("signs")
 	endif
 endif
 
-
-
 " restore 'cpo'
 let &cpo = s:cpo_save
 unlet s:cpo_save
+
